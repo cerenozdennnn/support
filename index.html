@@ -1,51 +1,273 @@
-function doGet(e) {
-  var sheet = SpreadsheetApp.getActiveSpreadsheet().getActiveSheet();
-  var data = sheet.getDataRange().getValues();
-  var result = [];
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>OBASE Support Portal (Live)</title>
   
-  for (var i = 1; i < data.length; i++) {
-    result.push({
-      id: data[i][0],
-      company: data[i][1],
-      category: data[i][2],
-      title: data[i][3],
-      description: data[i][4],
-      status: data[i][5],
-      rca: data[i][6],
-      timestamp: data[i][7]
-    });
-  }
-  
-  return ContentService.createTextOutput(JSON.stringify(result))
-    .setMimeType(ContentService.MimeType.JSON);
-}
-
-function doPost(e) {
-  var sheet = SpreadsheetApp.getActiveSpreadsheet().getActiveSheet();
-  var params = JSON.parse(e.postData.contents);
-  
-  if (params.action === "create") {
-    sheet.appendRow([
-      params.id,
-      params.company,
-      params.category,
-      params.title,
-      params.description,
-      params.status || "Açık",
-      params.rca || "",
-      new Date().toISOString()
-    ]);
-  } else if (params.action === "update") {
-    var data = sheet.getDataRange().getValues();
-    for (var i = 1; i < data.length; i++) {
-      if (data[i][0] === params.id) {
-        if (params.status !== undefined) sheet.getRange(i + 1, 6).setValue(params.status);
-        if (params.rca !== undefined) sheet.getRange(i + 1, 7).setValue(params.rca);
-        break;
-      }
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; font-family: system-ui, -apple-system, sans-serif; }
+    body { background-color: #0f172a; color: #f8fafc; padding: 16px; }
+    .container { max-width: 1100px; margin: 0 auto; }
+    header { background-color: #1e293b; padding: 16px 20px; border-radius: 8px; border: 1px solid #334155; display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; flex-wrap: wrap; gap: 10px; }
+    h1 { font-size: 18px; font-weight: bold; color: #fff; }
+    .status-dot { display: inline-block; width: 8px; height: 8px; background: #22c55e; border-radius: 50%; margin-right: 6px; }
+    .nav-btns { display: flex; gap: 6px; background: #0f172a; padding: 4px; border-radius: 6px; border: 1px solid #334155; }
+    .btn { background: transparent; border: none; color: #94a3b8; padding: 8px 12px; border-radius: 4px; cursor: pointer; font-size: 12px; font-weight: 600; }
+    .btn.active { background: #2563eb; color: #fff; }
+    .btn-green { background: #16a34a; color: #fff; border: none; padding: 8px 14px; border-radius: 4px; cursor: pointer; font-weight: 600; font-size: 12px; }
+    .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
+    @media (max-width: 768px) { .grid { grid-template-columns: 1fr; } }
+    .card { background: #1e293b; padding: 18px; border-radius: 8px; border: 1px solid #334155; }
+    .form-group { margin-bottom: 12px; }
+    label { display: block; font-size: 11px; font-weight: 600; margin-bottom: 4px; color: #cbd5e1; }
+    input, select, textarea { width: 100%; background: #0f172a; border: 1px solid #334155; border-radius: 6px; padding: 10px; color: #fff; font-size: 12px; }
+    .submit-btn { width: 100%; background: #2563eb; color: #fff; border: none; padding: 12px; border-radius: 6px; font-weight: bold; cursor: pointer; margin-top: 6px; font-size: 13px; }
+    .ticket-item { background: #0f172a; border: 1px solid #334155; border-radius: 6px; padding: 12px; margin-bottom: 10px; }
+    .ticket-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px; }
+    .badge { font-size: 10px; font-weight: bold; padding: 3px 6px; border-radius: 4px; font-family: monospace; }
+    .badge-id { background: #1e3a8a; color: #93c5fd; }
+    .badge-status { background: #065f46; color: #a7f3d0; }
+    @media print {
+      body { background: #fff; color: #000; }
+      header, .grid, .nav-btns { display: none !important; }
+      #print-area { display: block !important; }
     }
-  }
-  
-  return ContentService.createTextOutput(JSON.stringify({ status: "success" }))
-    .setMimeType(ContentService.MimeType.JSON);
-}
+    #print-area { display: none; background: #fff; color: #0f172a; padding: 20px; border-radius: 8px; }
+    .print-header { border-bottom: 2px solid #0f172a; padding-bottom: 8px; margin-bottom: 16px; display: flex; justify-content: space-between; }
+    .print-case { border: 1px solid #cbd5e1; padding: 10px; border-radius: 6px; margin-bottom: 10px; font-size: 12px; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <header>
+      <div>
+        <h1>OBASE Support Portal</h1>
+        <p style="font-size: 11px; color: #94a3b8;"><span class="status-dot"></span>Google Sheets Canlı Veritabanı Bağlı</p>
+      </div>
+      <div class="nav-btns">
+        <button type="button" class="btn active" id="btn-client" onclick="showTab('client')">Müşteri Modu</button>
+        <button type="button" class="btn" id="btn-admin" onclick="showTab('admin')">Mühendis Modu</button>
+        <button type="button" class="btn" id="btn-report" onclick="showTab('report')">Tech Nation Raporu</button>
+      </div>
+    </header>
+
+    <div id="tab-client" class="grid">
+      <div class="card">
+        <h3 style="margin-bottom: 12px; font-size: 14px;">Yeni Case Oluştur</h3>
+        <div>
+          <div class="form-group">
+            <label>Şirket Adı *</label>
+            <input type="text" id="inpCompany" placeholder="Örn: Inditex, Migros">
+          </div>
+          <div class="form-group">
+            <label>Kategori</label>
+            <select id="inpCategory">
+              <option>Strategy / BI Platform</option>
+              <option>Database / DSN Connection</option>
+              <option>SSL / Security Certificate</option>
+              <option>AI / Chatbot Integration</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label>Case Başlığı *</label>
+            <input type="text" id="inpTitle" placeholder="Örn: Metadata Bağlantı Hatası">
+          </div>
+          <div class="form-group">
+            <label>Açıklama *</label>
+            <textarea id="inpDesc" rows="3" placeholder="Hata detayları..."></textarea>
+          </div>
+          <button type="button" class="submit-btn" id="btnSubmit" onclick="submitCase()">Talebi Gönder</button>
+        </div>
+      </div>
+
+      <div class="card">
+        <h3 style="margin-bottom: 12px; font-size: 14px;">Açılan Talepler</h3>
+        <div id="ticketsList"><p style="color:#64748b; font-size:12px;">Henüz talep girilmedi.</p></div>
+      </div>
+    </div>
+
+    <div id="tab-admin" class="card" style="display: none;">
+      <h3 style="margin-bottom: 12px; font-size: 14px;">Mühendis / Admin Yönetim Paneli</h3>
+      <div id="adminTicketsList"><p style="color:#64748b; font-size:12px;">Henüz talep girilmedi.</p></div>
+    </div>
+
+    <div id="tab-report" style="display: none;">
+      <div style="text-align: right; margin-bottom: 12px;">
+        <button type="button" class="btn-green" onclick="window.print()">📄 Raporu PDF Olarak İndir / Yazdır</button>
+      </div>
+      <div id="print-area">
+        <div class="print-header">
+          <div>
+            <h2 style="font-size: 15px; text-transform: uppercase;">Technical Root Cause Analysis & Support Log</h2>
+            <p style="font-size: 11px; color: #475569;">Candidate: Ceren Nur | Role: Support Engineer | Employer: Obase</p>
+          </div>
+          <div style="text-align: right; font-size: 11px;">
+            <strong>Tech Nation Evidence Document</strong>
+          </div>
+        </div>
+        <div id="reportContainer"></div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    // 🔗 APPS SCRIPT YENİ DAĞITIM SÜRÜMÜ URL'İNİZ BURAYA ENTEGRE EDİLDİ:
+    var GOOGLE_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbx_ENTER_YOUR_EXEC_URL_HERE/exec";
+
+    var cases = [];
+
+    function fetchCases() {
+      if (!GOOGLE_SCRIPT_URL || GOOGLE_SCRIPT_URL.includes("ENTER_YOUR_EXEC_URL")) return;
+      fetch(GOOGLE_SCRIPT_URL)
+        .then(res => res.json())
+        .then(data => {
+          if (Array.isArray(data)) {
+            cases = data.reverse();
+            render();
+          }
+        })
+        .catch(err => console.log(err));
+    }
+
+    function submitCase() {
+      var comp = document.getElementById('inpCompany').value.trim();
+      var title = document.getElementById('inpTitle').value.trim();
+      var desc = document.getElementById('inpDesc').value.trim();
+
+      if (!comp || !title || !desc) {
+        alert("Lütfen tüm zorunlu alanları doldurun.");
+        return;
+      }
+
+      var btn = document.getElementById('btnSubmit');
+      btn.innerText = "Gönderiliyor...";
+      btn.disabled = true;
+
+      var newObj = {
+        action: "create",
+        id: "OBASE-" + Math.floor(100 + Math.random() * 900),
+        company: comp,
+        category: document.getElementById('inpCategory').value,
+        title: title,
+        description: desc,
+        status: "Açık",
+        rca: ""
+      };
+
+      // Anında ekrana bas
+      cases.unshift(newObj);
+      render();
+
+      // Formu temizle
+      document.getElementById('inpCompany').value = '';
+      document.getElementById('inpTitle').value = '';
+      document.getElementById('inpDesc').value = '';
+
+      // Buton kilitlenmesini engelle
+      setTimeout(function() {
+        btn.innerText = "Talebi Gönder";
+        btn.disabled = false;
+      }, 400);
+
+      // Veritabanına arkaplanda gönder
+      fetch(GOOGLE_SCRIPT_URL, {
+        method: "POST",
+        mode: "no-cors",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(newObj)
+      }).then(() => {
+        setTimeout(fetchCases, 1200);
+      }).catch(err => console.log(err));
+    }
+
+    function showTab(t) {
+      document.getElementById('tab-client').style.display = (t === 'client') ? 'grid' : 'none';
+      document.getElementById('tab-admin').style.display = (t === 'admin') ? 'block' : 'none';
+      document.getElementById('tab-report').style.display = (t === 'report') ? 'block' : 'none';
+
+      document.getElementById('btn-client').className = 'btn ' + (t === 'client' ? 'active' : '');
+      document.getElementById('btn-admin').className = 'btn ' + (t === 'admin' ? 'active' : '');
+      document.getElementById('btn-report').className = 'btn ' + (t === 'report' ? 'active' : '');
+    }
+
+    function updateStatus(caseId, val) {
+      fetch(GOOGLE_SCRIPT_URL, {
+        method: "POST",
+        mode: "no-cors",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "update", id: caseId, status: val })
+      }).then(() => setTimeout(fetchCases, 1200));
+    }
+
+    function updateRCA(caseId, val) {
+      fetch(GOOGLE_SCRIPT_URL, {
+        method: "POST",
+        mode: "no-cors",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "update", id: caseId, rca: val })
+      }).then(() => setTimeout(fetchCases, 1200));
+    }
+
+    function render() {
+      var html1 = "";
+      for (var i = 0; i < cases.length; i++) {
+        var item = cases[i];
+        html1 += '<div class="ticket-item">';
+        html1 += '  <div class="ticket-header">';
+        html1 += '    <div><span class="badge badge-id">' + item.id + '</span><strong style="font-size:12px; color:#fff; margin-left:4px;">' + item.company + '</strong></div>';
+        html1 += '    <span class="badge badge-status">' + item.status + '</span>';
+        html1 += '  </div>';
+        html1 += '  <h4 style="font-size:13px; color:#38bdf8;">' + item.title + '</h4>';
+        html1 += '  <p style="font-size:12px; color:#cbd5e1; margin-top:2px;">' + item.description + '</p>';
+        if (item.rca) {
+          html1 += '  <div style="margin-top:6px; background:#1e293b; padding:8px; border-radius:4px; border:1px solid #0284c7;">';
+          html1 += '    <strong style="font-size:11px; color:#38bdf8;">Çözüm / RCA:</strong>';
+          html1 += '    <p style="font-size:11px; color:#e2e8f0; margin-top:2px;">' + item.rca + '</p>';
+          html1 += '  </div>';
+        }
+        html1 += '</div>';
+      }
+      document.getElementById('ticketsList').innerHTML = html1 || '<p style="color:#64748b; font-size:12px;">Henüz talep bulunmuyor.</p>';
+
+      var html2 = "";
+      for (var j = 0; j < cases.length; j++) {
+        var it = cases[j];
+        html2 += '<div class="ticket-item">';
+        html2 += '  <div class="ticket-header">';
+        html2 += '    <div><span class="badge badge-id">' + it.id + '</span><strong style="color:#fff; margin-left:4px; font-size:12px;">' + it.company + '</strong></div>';
+        html2 += '    <select onchange="updateStatus(\'' + it.id + '\', this.value)" style="width:auto; padding:2px 6px; font-size:11px;">';
+        html2 += '      <option value="Açık"' + (it.status === 'Açık' ? ' selected' : '') + '>Açık</option>';
+        html2 += '      <option value="İşlemde"' + (it.status === 'İşlemde' ? ' selected' : '') + '>İşlemde</option>';
+        html2 += '      <option value="Çözüldü"' + (it.status === 'Çözüldü' ? ' selected' : '') + '>Çözüldü</option>';
+        html2 += '    </select>';
+        html2 += '  </div>';
+        html2 += '  <p style="font-size:12px; color:#fff; font-weight:600;">' + it.title + '</p>';
+        html2 += '  <p style="font-size:11px; color:#94a3b8; margin-bottom:4px;">' + it.description + '</p>';
+        html2 += '  <div style="border-top:1px solid #334155; padding-top:6px;">';
+        html2 += '    <label style="font-size:11px; color:#38bdf8;">Kök Neden Analizi (RCA) Ekle:</label>';
+        html2 += '    <textarea rows="2" placeholder="Uygulanan teknik çözüm..." onchange="updateRCA(\'' + it.id + '\', this.value)" style="font-size:11px;">' + (it.rca || '') + '</textarea>';
+        html2 += '  </div>';
+        html2 += '</div>';
+      }
+      document.getElementById('adminTicketsList').innerHTML = html2 || '<p style="color:#64748b; font-size:12px;">Henüz talep bulunmuyor.</p>';
+
+      var html3 = "";
+      var count = 0;
+      for (var k = 0; k < cases.length; k++) {
+        if (cases[k].rca) {
+          count++;
+          html3 += '<div class="print-case">';
+          html3 += '  <strong>Case #' + count + ': ' + cases[k].id + ' - ' + cases[k].title + ' (' + cases[k].company + ')</strong>';
+          html3 += '  <p style="margin-top:2px;"><strong>Problem:</strong> ' + cases[k].description + '</p>';
+          html3 += '  <p style="background:#f1f5f9; padding:6px; border-radius:4px; margin-top:4px;"><strong>Engineering Fix (RCA):</strong> ' + cases[k].rca + '</p>';
+          html3 += '</div>';
+        }
+      }
+      document.getElementById('reportContainer').innerHTML = html3 || '<p style="font-size:11px; color:#64748b;">RCA çözümü girilmiş talep bulunmuyor.</p>';
+    }
+
+    fetchCases();
+  </script>
+</body>
+</html>
