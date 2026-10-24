@@ -1,0 +1,100 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Obase Müşteri Destek & Case Portalı</title>
+  <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-database-compat.js"></script>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; font-family: system-ui, sans-serif; }
+    body { background: #0f172a; color: #f8fafc; padding: 20px; }
+    .container { max-width: 1000px; margin: 0 auto; }
+    .card { background: #1e293b; p-4; padding: 20px; border-radius: 12px; border: 1px solid #334155; margin-bottom: 20px; }
+    .form-group { margin-bottom: 12px; }
+    label { display: block; font-size: 12px; font-weight: 600; margin-bottom: 4px; color: #cbd5e1; }
+    input, select, textarea { width: 100%; background: #0f172a; border: 1px solid #334155; border-radius: 6px; padding: 10px; color: #fff; }
+    button { width: 100%; background: #2563eb; color: #fff; border: none; padding: 12px; border-radius: 6px; font-weight: bold; cursor: pointer; }
+    .ticket-item { background: #0f172a; border: 1px solid #334155; border-radius: 8px; padding: 12px; margin-bottom: 8px; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h2 style="margin-bottom: 16px;">OBASE Support Portal (Live)</h2>
+    <div class="card">
+      <h3>Yeni Case Oluştur</h3>
+      <form id="ticket-form" onsubmit="handleFormSubmit(event)">
+        <div class="form-group"><label>Şirket Adı *</label><input type="text" id="company" required></div>
+        <div class="form-group">
+          <label>Kategori</label>
+          <select id="category">
+            <option>Strategy / BI Platform</option>
+            <option>Database / DSN Connection</option>
+            <option>SSL / Security Certificate</option>
+            <option>AI / Chatbot Integration</option>
+          </select>
+        </div>
+        <div class="form-group"><label>Case Başlığı *</label><input type="text" id="title" required></div>
+        <div class="form-group"><label>Açıklama *</label><textarea id="description" rows="3" required></textarea></div>
+        <button type="submit" id="submit-btn">Talebi Gönder</button>
+      </form>
+    </div>
+
+    <div class="card">
+      <h3>Açılan Talepler</h3>
+      <div id="tickets-list">Yükleniyor...</div>
+    </div>
+  </div>
+
+  <script>
+    const firebaseConfig = { databaseURL: "https://obase-support-default-rtdb.europe-west1.firebasedatabase.app" };
+    if (!firebase.apps.length) firebase.initializeApp(firebaseConfig);
+    const db = firebase.database();
+    const ticketsRef = db.ref("obase_tickets");
+
+    ticketsRef.on("value", (snapshot) => {
+      const data = snapshot.val();
+      const container = document.getElementById('tickets-list');
+      if (!data) { container.innerHTML = 'Henüz talep yok.'; return; }
+      container.innerHTML = Object.keys(data).reverse().map(k => `
+        <div class="ticket-item">
+          <strong>${data[k].id} - ${data[k].company}</strong> [${data[k].status}]
+          <p style="font-size:13px; color:#cbd5e1; margin-top:4px;">${data[k].title}: ${data[k].description}</p>
+        </div>
+      `).join('');
+    }, (error) => {
+      alert("Firebase Okuma Hatası: Veritabanı izinleri kapalı olabilir!\n" + error.message);
+    });
+
+    function handleFormSubmit(e) {
+      e.preventDefault();
+      const btn = document.getElementById('submit-btn');
+      btn.innerText = 'Gönderiliyor...';
+      btn.disabled = true;
+
+      const newTicket = {
+        id: 'OBASE-' + Math.floor(100 + Math.random() * 900),
+        company: document.getElementById('company').value,
+        category: document.getElementById('category').value,
+        title: document.getElementById('title').value,
+        description: document.getElementById('description').value,
+        status: 'Açık',
+        timestamp: Date.now()
+      };
+
+      ticketsRef.push(newTicket)
+        .then(() => {
+          btn.innerText = 'Talebi Gönder';
+          btn.disabled = false;
+          document.getElementById('ticket-form').reset();
+          alert('Case başarıyla veritabanına kaydedildi!');
+        })
+        .catch((error) => {
+          btn.innerText = 'Talebi Gönder';
+          btn.disabled = false;
+          alert('GÖNDERME HATASI:\n' + error.message + '\n\nLütfen Firebase Console izinlerini (Rules) kontrol edin.');
+        });
+    }
+  </script>
+</body>
+</html>
